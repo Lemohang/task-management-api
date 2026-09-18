@@ -1,77 +1,81 @@
+
 import { Injectable, NotFoundException } from '@nestjs/common';
+import { InjectRepository } from '@nestjs/typeorm';
+import { Repository } from 'typeorm';
+
+import { Task } from './task.entity.js';
 import { CreateTaskDto } from './dto/create-task.dto.js';
 import { UpdateTaskDto } from './dto/update-task.dto.js';
 
 @Injectable()
 export class TasksService {
-  updateTask(id: number, updateTaskDto: UpdateTaskDto) {
-  const taskIndex = this.tasks.findIndex((task) => task.id === id);
+  constructor(
+    @InjectRepository(Task)
+    private readonly taskRepository: Repository<Task>,
+  ) {}
 
-  if (taskIndex === -1) {
-    throw new NotFoundException(`Task with ID ${id} not found`);
+async getTasks(
+  page = 1,
+  limit = 10,
+  completed?: boolean,
+) {
+  const query = this.taskRepository.createQueryBuilder('task');
+
+  if (completed !== undefined) {
+    query.where('task.completed = :completed', { completed });
   }
 
-  this.tasks[taskIndex] = {
-    ...this.tasks[taskIndex],
-    ...updateTaskDto,
-  };
+  query
+    .skip((page - 1) * limit)
+    .take(limit)
+    .orderBy('task.createdAt', 'DESC');
 
-  return this.tasks[taskIndex];
-}
-  private tasks = [
-    {
-      id: 1,
-      title: 'Learn NestJS',
-      completed: false,
+  const [tasks, total] = await query.getManyAndCount();
+
+  return {
+    data: tasks,
+    meta: {
+      page,
+      limit,
+      total,
+      totalPages: Math.ceil(total / limit),
     },
-    {
-      id: 2,
-      title: 'Build Task Management API',
-      completed: false,
-    },
-  ];
-
-  getTasks() {
-    return this.tasks;
-  }
-
-  createTask(createTaskDto: CreateTaskDto) {
-  const newId =
-    this.tasks.length > 0
-      ? Math.max(...this.tasks.map((task) => task.id)) + 1
-      : 1;
-
-  const task = {
-    id: newId,
-    ...createTaskDto,
-    completed: false,
   };
-
-  this.tasks.push(task);
-
-  return task;
 }
+  async getTaskById(id: number) {
+    const task = await this.taskRepository.findOne({
+      where: { id },
+    });
 
- getTaskById(id: number) {
-  const task = this.tasks.find((task) => task.id === id);
+    if (!task) {
+      throw new NotFoundException(`Task with ID ${id} not found`);
+    }
 
-  if (!task) {
-    throw new NotFoundException(`Task with ID ${id} not found`);
+    return task;
   }
 
-  return task;
-}
-deleteTask(id: number) {
-  const taskIndex = this.tasks.findIndex((task) => task.id === id);
+  async createTask(createTaskDto: CreateTaskDto) {
+    const task = this.taskRepository.create(createTaskDto);
 
-  if (taskIndex === -1) {
-    throw new NotFoundException(`Task with ID ${id} not found`);
+    return this.taskRepository.save(task);
   }
 
-  const deletedTask = this.tasks[taskIndex];
+  async updateTask(
+    id: number,
+    updateTaskDto: UpdateTaskDto,
+  ) {
+    const task = await this.getTaskById(id);
 
-  this.tasks.splice(taskIndex, 1);
+    Object.assign(task, updateTaskDto);
 
-  return deletedTask;
-}
+    return this.taskRepository.save(task);
+  }
+
+  async deleteTask(id: number) {
+    const task = await this.getTaskById(id);
+
+    await this.taskRepository.remove(task);
+
+    return task;
+  }
 }
