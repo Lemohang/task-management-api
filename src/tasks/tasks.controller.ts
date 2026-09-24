@@ -1,10 +1,10 @@
-
 import {
   Body,
   Controller,
   Delete,
   Get,
   Param,
+  ParseIntPipe,
   Patch,
   Post,
   Query,
@@ -23,6 +23,10 @@ import { TaskQueryDto } from './dto/task-query.dto.js';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard.js';
 import { AuthenticatedUser } from '../auth/authenticated-user.interface.js';
 
+import { Roles } from '../auth/roles.decorator.js';
+import { RolesGuard } from '../auth/roles.guard.js';
+import { UserRole } from '../users/user-role.enum.js';
+
 @Controller('tasks')
 export class TasksController {
   constructor(
@@ -30,13 +34,22 @@ export class TasksController {
   ) {}
 
   // =========================
-  // GET ALL TASKS
+  // GET TASKS
   // =========================
+  // ADMIN → sees all tasks
+  // USER  → sees only tasks assigned to them
 
   @UseGuards(JwtAuthGuard)
   @Get()
-  getTasks(@Query() query: TaskQueryDto) {
+  getTasks(
+    @Query() query: TaskQueryDto,
+    @Req()
+    req: Request & {
+      user: AuthenticatedUser;
+    },
+  ) {
     return this.tasksService.getTasks(
+      req.user,
       query.page ?? 1,
       query.limit ?? 10,
       query.status,
@@ -50,7 +63,13 @@ export class TasksController {
   // =========================
   // GET TASK STATISTICS
   // =========================
+  // ADMIN ONLY
 
+  @UseGuards(
+    JwtAuthGuard,
+    RolesGuard,
+  )
+  @Roles(UserRole.ADMIN)
   @Get('stats')
   getTaskStats() {
     return this.tasksService.getTaskStats();
@@ -59,11 +78,13 @@ export class TasksController {
   // =========================
   // GET MY TASKS
   // =========================
+  // Authenticated users only
 
   @UseGuards(JwtAuthGuard)
   @Get('my')
   getMyTasks(
-    @Req() req: Request & {
+    @Req()
+    req: Request & {
       user: AuthenticatedUser;
     },
   ) {
@@ -75,20 +96,34 @@ export class TasksController {
   // =========================
   // GET TASK BY ID
   // =========================
+  // ADMIN → can view any task
+  // USER  → can only view their own task
 
+  @UseGuards(JwtAuthGuard)
   @Get(':id')
   getTaskById(
-    @Param('id') id: string,
+    @Param('id', ParseIntPipe) id: number,
+    @Req()
+    req: Request & {
+      user: AuthenticatedUser;
+    },
   ) {
     return this.tasksService.getTaskById(
-      Number(id),
+      id,
+      req.user,
     );
   }
 
   // =========================
   // CREATE TASK
   // =========================
+  // ADMIN ONLY
 
+  @UseGuards(
+    JwtAuthGuard,
+    RolesGuard,
+  )
+  @Roles(UserRole.ADMIN)
   @Post()
   createTask(
     @Body() createTaskDto: CreateTaskDto,
@@ -101,28 +136,42 @@ export class TasksController {
   // =========================
   // UPDATE TASK
   // =========================
+  // ADMIN → can update any task
+  // USER  → can update their own task
 
+  @UseGuards(JwtAuthGuard)
   @Patch(':id')
   updateTask(
-    @Param('id') id: string,
+    @Param('id', ParseIntPipe) id: number,
     @Body() updateTaskDto: UpdateTaskDto,
+    @Req()
+    req: Request & {
+      user: AuthenticatedUser;
+    },
   ) {
     return this.tasksService.updateTask(
-      Number(id),
+      id,
       updateTaskDto,
+      req.user,
     );
   }
 
   // =========================
   // DELETE TASK
   // =========================
+  // ADMIN ONLY
 
+  @UseGuards(
+    JwtAuthGuard,
+    RolesGuard,
+  )
+  @Roles(UserRole.ADMIN)
   @Delete(':id')
   deleteTask(
-    @Param('id') id: string,
+    @Param('id', ParseIntPipe) id: number,
   ) {
     return this.tasksService.deleteTask(
-      Number(id),
+      id,
     );
   }
 }

@@ -1,4 +1,9 @@
-import { Injectable, NotFoundException } from '@nestjs/common';
+import {
+  ForbiddenException,
+  Injectable,
+  NotFoundException,
+} from '@nestjs/common';
+
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 
@@ -8,7 +13,11 @@ import { UpdateTaskDto } from './dto/update-task.dto.js';
 import { TaskDue } from './task-due.enum.js';
 import { TaskStatus } from './task-status.enum.js';
 import { TaskPriority } from './task-priority.enum.js';
+
 import { User } from '../users/user.entity.js';
+import { UserRole } from '../users/user-role.enum.js';
+
+import { AuthenticatedUser } from '../auth/authenticated-user.interface.js';
 
 @Injectable()
 export class TasksService {
@@ -21,9 +30,10 @@ export class TasksService {
   ) {}
 
   // =========================
-  // GET ALL TASKS
+  // GET TASKS
   // =========================
   async getTasks(
+    currentUser: AuthenticatedUser,
     page = 1,
     limit = 10,
     status?: string,
@@ -34,7 +44,10 @@ export class TasksService {
   ) {
     const query = this.taskRepository
       .createQueryBuilder('task')
-      .leftJoinAndSelect('task.assignedTo', 'assignedTo')
+      .leftJoinAndSelect(
+        'task.assignedTo',
+        'assignedTo',
+      )
       .addSelect([
         'assignedTo.id',
         'assignedTo.name',
@@ -43,21 +56,47 @@ export class TasksService {
         'assignedTo.updatedAt',
       ]);
 
-    // Filter by status
+    // =========================
+    // AUTHORIZATION
+    // =========================
+    // ADMIN can see all tasks.
+    // USER can only see tasks assigned to them.
+    if (currentUser.role !== UserRole.ADMIN) {
+      query.where(
+        'task.assignedToId = :userId',
+        {
+          userId: currentUser.id,
+        },
+      );
+    }
+
+    // =========================
+    // FILTER BY STATUS
+    // =========================
     if (status !== undefined) {
-      query.where('task.status = :status', {
-        status,
-      });
+      query.andWhere(
+        'task.status = :status',
+        {
+          status,
+        },
+      );
     }
 
-    // Filter by priority
+    // =========================
+    // FILTER BY PRIORITY
+    // =========================
     if (priority !== undefined) {
-      query.andWhere('task.priority = :priority', {
-        priority,
-      });
+      query.andWhere(
+        'task.priority = :priority',
+        {
+          priority,
+        },
+      );
     }
 
-    // Search title and description
+    // =========================
+    // SEARCH TITLE & DESCRIPTION
+    // =========================
     if (search !== undefined) {
       query.andWhere(
         '(task.title ILIKE :search OR task.description ILIKE :search)',
@@ -67,7 +106,9 @@ export class TasksService {
       );
     }
 
-    // Filter by assigned user
+    // =========================
+    // FILTER BY ASSIGNED USER
+    // =========================
     if (assignedTo !== undefined) {
       query.andWhere(
         'task.assignedToId = :assignedTo',
@@ -77,14 +118,18 @@ export class TasksService {
       );
     }
 
-    // Overdue tasks
+    // =========================
+    // OVERDUE TASKS
+    // =========================
     if (due === TaskDue.OVERDUE) {
       query.andWhere(
         'task.dueDate IS NOT NULL AND task.dueDate < NOW()',
       );
     }
 
-    // Tasks due today
+    // =========================
+    // TASKS DUE TODAY
+    // =========================
     if (due === TaskDue.TODAY) {
       const startOfDay = new Date();
 
@@ -95,9 +140,8 @@ export class TasksService {
         0,
       );
 
-      const startOfTomorrow = new Date(
-        startOfDay,
-      );
+      const startOfTomorrow =
+        new Date(startOfDay);
 
       startOfTomorrow.setDate(
         startOfTomorrow.getDate() + 1,
@@ -112,9 +156,12 @@ export class TasksService {
       );
     }
 
-    // Upcoming tasks
+    // =========================
+    // UPCOMING TASKS
+    // =========================
     if (due === TaskDue.UPCOMING) {
-      const startOfTomorrow = new Date();
+      const startOfTomorrow =
+        new Date();
 
       startOfTomorrow.setHours(
         0,
@@ -135,7 +182,9 @@ export class TasksService {
       );
     }
 
-    // Pagination and sorting
+    // =========================
+    // PAGINATION & SORTING
+    // =========================
     query
       .skip((page - 1) * limit)
       .take(limit)
@@ -149,7 +198,6 @@ export class TasksService {
 
     return {
       data: tasks,
-
       meta: {
         page,
         limit,
@@ -164,15 +212,15 @@ export class TasksService {
   // =========================
   // GET MY TASKS
   // =========================
-  async getMyTasks(userId: number) {
+  async getMyTasks(
+    userId: number,
+  ) {
     return this.taskRepository
       .createQueryBuilder('task')
-
       .leftJoinAndSelect(
         'task.assignedTo',
         'assignedTo',
       )
-
       .addSelect([
         'assignedTo.id',
         'assignedTo.name',
@@ -180,19 +228,16 @@ export class TasksService {
         'assignedTo.createdAt',
         'assignedTo.updatedAt',
       ])
-
       .where(
         'task.assignedToId = :userId',
         {
           userId,
         },
       )
-
       .orderBy(
         'task.createdAt',
         'DESC',
       )
-
       .getMany();
   }
 
@@ -248,15 +293,12 @@ export class TasksService {
     const overdue =
       await this.taskRepository
         .createQueryBuilder('task')
-
         .where(
           'task.dueDate IS NOT NULL',
         )
-
         .andWhere(
           'task.dueDate < NOW()',
         )
-
         .andWhere(
           'task.status != :completed',
           {
@@ -264,7 +306,6 @@ export class TasksService {
               TaskStatus.COMPLETED,
           },
         )
-
         .andWhere(
           'task.status != :cancelled',
           {
@@ -272,7 +313,6 @@ export class TasksService {
               TaskStatus.CANCELLED,
           },
         )
-
         .getCount();
 
     return {
@@ -290,13 +330,15 @@ export class TasksService {
   // =========================
   // GET TASK BY ID
   // =========================
-  async getTaskById(id: number) {
+  async getTaskById(
+    id: number,
+    currentUser: AuthenticatedUser,
+  ) {
     const task =
       await this.taskRepository.findOne({
         where: {
           id,
         },
-
         relations: {
           assignedTo: true,
         },
@@ -305,6 +347,17 @@ export class TasksService {
     if (!task) {
       throw new NotFoundException(
         `Task with ID ${id} not found`,
+      );
+    }
+
+    // ADMIN can view any task.
+    // USER can only view tasks assigned to them.
+    if (
+      currentUser.role !== UserRole.ADMIN &&
+      task.assignedTo?.id !== currentUser.id
+    ) {
+      throw new ForbiddenException(
+        'You can only view tasks assigned to you',
       );
     }
 
@@ -322,8 +375,9 @@ export class TasksService {
       ...taskData
     } = createTaskDto;
 
-    let assignedUser: User | null =
-      null;
+    let assignedUser:
+      | User
+      | null = null;
 
     if (
       assignedToId !== undefined
@@ -361,9 +415,24 @@ export class TasksService {
   async updateTask(
     id: number,
     updateTaskDto: UpdateTaskDto,
+    currentUser: AuthenticatedUser,
   ) {
     const task =
-      await this.getTaskById(id);
+      await this.getTaskById(
+        id,
+        currentUser,
+      );
+
+    // ADMIN can update any task.
+    // USER can only update their own assigned task.
+    if (
+      currentUser.role !== UserRole.ADMIN &&
+      task.assignedTo?.id !== currentUser.id
+    ) {
+      throw new ForbiddenException(
+        'You can only update tasks assigned to you',
+      );
+    }
 
     const {
       assignedToId,
@@ -375,9 +444,22 @@ export class TasksService {
       taskData,
     );
 
+    // =========================
+    // REASSIGN TASK
+    // =========================
+    // Only ADMIN can reassign tasks.
     if (
       assignedToId !== undefined
     ) {
+      if (
+        currentUser.role !==
+        UserRole.ADMIN
+      ) {
+        throw new ForbiddenException(
+          'Only administrators can assign tasks',
+        );
+      }
+
       const assignedUser =
         await this.userRepository.findOne(
           {
@@ -405,9 +487,24 @@ export class TasksService {
   // =========================
   // DELETE TASK
   // =========================
-  async deleteTask(id: number) {
+  async deleteTask(
+    id: number,
+  ) {
     const task =
-      await this.getTaskById(id);
+      await this.taskRepository.findOne({
+        where: {
+          id,
+        },
+        relations: {
+          assignedTo: true,
+        },
+      });
+
+    if (!task) {
+      throw new NotFoundException(
+        `Task with ID ${id} not found`,
+      );
+    }
 
     await this.taskRepository.remove(
       task,
