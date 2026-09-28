@@ -15,6 +15,8 @@ import { Request } from 'express';
 import { UsersService } from './users.service.js';
 
 import { CreateUserDto } from './dto/create-user.dto.js';
+import { UpdateUserDto } from './dto/update-user.dto.js';
+import { UpdateUserStatusDto } from './dto/update-user-status.dto.js';
 import { ChangePasswordDto } from './dto/change-password.dto.js';
 import { ResetPasswordDto } from './dto/reset-password.dto.js';
 
@@ -31,31 +33,112 @@ export class UsersController {
     private readonly usersService: UsersService,
   ) {}
 
+  // =========================
+  // GET ALL USERS
+  // =========================
+  // ADMIN ONLY
+
+  @UseGuards(
+    JwtAuthGuard,
+    RolesGuard,
+  )
+  @Roles(UserRole.ADMIN)
   @Get()
   getUsers() {
     return this.usersService.getUsers();
   }
 
+  // =========================
+  // CREATE USER
+  // =========================
+  // ADMIN ONLY
+
+  @UseGuards(
+    JwtAuthGuard,
+    RolesGuard,
+  )
+  @Roles(UserRole.ADMIN)
   @Post()
   createUser(
     @Body() createUserDto: CreateUserDto,
   ) {
-    return this.usersService.createUser(createUserDto);
+    return this.usersService.createUser(
+      createUserDto,
+    );
   }
 
+  // =========================
+  // GET USER TASKS
+  // =========================
+
+  @UseGuards(JwtAuthGuard)
   @Get(':id/tasks')
   getUserTasks(
     @Param('id', ParseIntPipe) id: number,
+    @Req()
+    req: Request & {
+      user: AuthenticatedUser;
+    },
   ) {
-    return this.usersService.getUserTasks(id);
+    return this.usersService.getUserTasks(
+      id,
+      req.user,
+    );
   }
 
-  // User changes their own password
+  // =========================
+  // UPDATE USER
+  // =========================
+  // ADMIN ONLY
+
+  @UseGuards(
+    JwtAuthGuard,
+    RolesGuard,
+  )
+  @Roles(UserRole.ADMIN)
+  @Patch(':id')
+  updateUser(
+    @Param('id', ParseIntPipe) id: number,
+    @Body() updateUserDto: UpdateUserDto,
+  ) {
+    return this.usersService.updateUser(
+      id,
+      updateUserDto,
+    );
+  }
+
+  // =========================
+  // ACTIVATE / DEACTIVATE USER
+  // =========================
+  // ADMIN ONLY
+
+  @UseGuards(
+    JwtAuthGuard,
+    RolesGuard,
+  )
+  @Roles(UserRole.ADMIN)
+  @Patch(':id/status')
+  updateUserStatus(
+    @Param('id', ParseIntPipe) id: number,
+    @Body()
+    updateUserStatusDto: UpdateUserStatusDto,
+  ) {
+    return this.usersService.updateUserStatus(
+      id,
+      updateUserStatusDto.isActive,
+    );
+  }
+
+  // =========================
+  // CHANGE OWN PASSWORD
+  // =========================
+
   @UseGuards(JwtAuthGuard)
   @Patch(':id/password')
   changePassword(
     @Param('id', ParseIntPipe) id: number,
-    @Body() changePasswordDto: ChangePasswordDto,
+    @Body()
+    changePasswordDto: ChangePasswordDto,
     @Req()
     req: Request & {
       user: AuthenticatedUser;
@@ -68,13 +151,20 @@ export class UsersController {
     );
   }
 
-  // Admin resets another user's password
-  @UseGuards(JwtAuthGuard, RolesGuard)
+  // =========================
+  // ADMIN PASSWORD RESET
+  // =========================
+
+  @UseGuards(
+    JwtAuthGuard,
+    RolesGuard,
+  )
   @Roles(UserRole.ADMIN)
   @Patch(':id/password/reset')
   resetPassword(
     @Param('id', ParseIntPipe) id: number,
-    @Body() resetPasswordDto: ResetPasswordDto,
+    @Body()
+    resetPasswordDto: ResetPasswordDto,
     @Req()
     req: Request & {
       user: AuthenticatedUser;

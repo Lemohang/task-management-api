@@ -1,4 +1,3 @@
-
 import {
   Injectable,
   UnauthorizedException,
@@ -22,6 +21,10 @@ export class AuthService {
     private readonly jwtService: JwtService,
   ) {}
 
+  // =========================
+  // LOGIN
+  // =========================
+
   async login(loginDto: LoginDto) {
     const user = await this.userRepository
       .createQueryBuilder('user')
@@ -31,16 +34,26 @@ export class AuthService {
       })
       .getOne();
 
+    // User does not exist
     if (!user || !user.password) {
       throw new UnauthorizedException(
         'Invalid email or password',
       );
     }
 
-    const passwordMatches = await bcrypt.compare(
-      loginDto.password,
-      user.password,
-    );
+    // User account is deactivated
+    if (!user.isActive) {
+      throw new UnauthorizedException(
+        'Your account has been deactivated',
+      );
+    }
+
+    // Check password
+    const passwordMatches =
+      await bcrypt.compare(
+        loginDto.password,
+        user.password,
+      );
 
     if (!passwordMatches) {
       throw new UnauthorizedException(
@@ -48,19 +61,18 @@ export class AuthService {
       );
     }
 
+    // JWT payload
     const payload = {
       sub: user.id,
       email: user.email,
       role: user.role,
     };
 
-    const accessToken = await this.jwtService.signAsync(
-      payload,
-    );
+    const accessToken =
+      await this.jwtService.signAsync(payload);
 
     return {
       accessToken,
     };
   }
 }
-
