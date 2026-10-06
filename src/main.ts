@@ -30,7 +30,8 @@ async function bootstrap() {
     origin: [
       'http://localhost:3000',
       'http://localhost:3001',
-      'https://task-management-web-tau.vercel.app/',
+      'https://mplug.com.ls',
+      'https://task-management-web-5s87.onrender.com',
     ],
     methods: [
       'GET',
