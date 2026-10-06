@@ -1,3 +1,4 @@
+
 import {
   Injectable,
   UnauthorizedException,
@@ -71,8 +72,21 @@ export class AuthService {
     const accessToken =
       await this.jwtService.signAsync(payload);
 
+    // Return safe user information.
+    // Never return the password.
+    const safeUser = {
+      id: user.id,
+      name: user.name,
+      email: user.email,
+      role: user.role,
+      isActive: user.isActive,
+      createdAt: user.createdAt,
+      updatedAt: user.updatedAt,
+    };
+
     return {
       accessToken,
+      user: safeUser,
     };
   }
 }

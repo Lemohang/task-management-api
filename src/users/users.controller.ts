@@ -1,3 +1,4 @@
+
 import {
   Body,
   Controller,
@@ -16,6 +17,7 @@ import { UsersService } from './users.service.js';
 
 import { CreateUserDto } from './dto/create-user.dto.js';
 import { UpdateUserDto } from './dto/update-user.dto.js';
+import { UpdateMyProfileDto } from './dto/update-my-profile.dto.js';
 import { UpdateUserStatusDto } from './dto/update-user-status.dto.js';
 import { ChangePasswordDto } from './dto/change-password.dto.js';
 import { ResetPasswordDto } from './dto/reset-password.dto.js';
@@ -64,6 +66,30 @@ export class UsersController {
   ) {
     return this.usersService.createUser(
       createUserDto,
+    );
+  }
+
+  // =========================
+  // UPDATE MY PROFILE
+  // =========================
+  // AUTHENTICATED USER ONLY
+  //
+  // Allows the logged-in user
+  // to update their own name/email.
+
+  @UseGuards(JwtAuthGuard)
+  @Patch('me')
+  updateMyProfile(
+    @Body()
+    updateMyProfileDto: UpdateMyProfileDto,
+    @Req()
+    req: Request & {
+      user: AuthenticatedUser;
+    },
+  ) {
+    return this.usersService.updateMyProfile(
+      req.user.id,
+      updateMyProfileDto,
     );
   }
 

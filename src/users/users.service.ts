@@ -1,3 +1,4 @@
+
 import {
   BadRequestException,
   ConflictException,
@@ -15,6 +16,7 @@ import * as bcrypt from 'bcryptjs';
 import { User } from './user.entity.js';
 import { CreateUserDto } from './dto/create-user.dto.js';
 import { UpdateUserDto } from './dto/update-user.dto.js';
+import { UpdateMyProfileDto } from './dto/update-my-profile.dto.js';
 import { ChangePasswordDto } from './dto/change-password.dto.js';
 import { ResetPasswordDto } from './dto/reset-password.dto.js';
 
@@ -127,6 +129,81 @@ export class UsersService {
       password,
       ...safeUser
     } = savedUser;
+
+    return safeUser;
+  }
+
+  // =========================
+  // UPDATE MY PROFILE
+  // =========================
+  // AUTHENTICATED USER ONLY
+  //
+  // Users can only update their
+  // own name and email.
+  //
+  // Role, password and isActive
+  // cannot be changed here.
+
+  async updateMyProfile(
+    userId: number,
+    updateMyProfileDto: UpdateMyProfileDto,
+  ) {
+    const user = await this.userRepository.findOne({
+      where: {
+        id: userId,
+      },
+    });
+
+    if (!user) {
+      throw new NotFoundException(
+        `User with ID ${userId} not found`,
+      );
+    }
+
+    // =========================
+    // UPDATE EMAIL
+    // =========================
+
+    if (updateMyProfileDto.email !== undefined) {
+      const existingUser =
+        await this.userRepository.findOne({
+          where: {
+            email: updateMyProfileDto.email,
+          },
+        });
+
+      if (
+        existingUser &&
+        existingUser.id !== userId
+      ) {
+        throw new ConflictException(
+          'A user with this email already exists',
+        );
+      }
+
+      user.email = updateMyProfileDto.email;
+    }
+
+    // =========================
+    // UPDATE NAME
+    // =========================
+
+    if (updateMyProfileDto.name !== undefined) {
+      user.name = updateMyProfileDto.name;
+    }
+
+    // =========================
+    // SAVE
+    // =========================
+
+    const updatedUser =
+      await this.userRepository.save(user);
+
+    // Never return the password
+    const {
+      password,
+      ...safeUser
+    } = updatedUser;
 
     return safeUser;
   }
